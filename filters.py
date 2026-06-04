@@ -76,6 +76,26 @@ OTHER_KEYWORDS = [
     "처방식",     # 처방식 사료/식이
 ]
 
+# ── 다이소형(저가 생활잡화·소품) ─────────────────────────
+# 다이소에서 싸게 흔히 파는 소형 잡화/문구/주방소품류.
+# 온라인 소싱 시 가격경쟁·차별화가 어려운 카테고리를 거른다.
+#
+# DAISO_BRANCH : 경로(path) 어디든 들어가면 그 하위 전체를 제외 (통째 가지치기)
+# DAISO_NAME   : 해당 잎(leaf) 카테고리 이름에 들어갈 때만 제외 (정밀)
+DAISO_BRANCH = [
+    "생활잡화", "주방잡화", "주방수납/잡화", "욕실용품/잡화",
+    "일회용", "파티/이벤트", "데코/포장용품",
+]
+DAISO_NAME = [
+    "메모지", "포스트잇", "점착메모", "수첩",
+    "데코테이프", "마스킹테이프", "생활테이프", "네임스티커", "스탬프",
+    "반짇고리",
+    "수세미", "행주", "고무장갑", "냅킨", "키친타올",
+    "조화",
+    "정리소품", "수납케이스", "정리함", "데스크정리",
+    "캔들", "디퓨저", "방향제",
+]
+
 
 def _norm(s: str) -> str:
     return (s or "").lower()
@@ -108,6 +128,15 @@ def exclusion_reason(category: dict) -> str | None:
     for kw in OTHER_KEYWORDS:
         if _norm(kw) in haystack:
             return f"기타 제외 키워드('{kw}')"
+
+    for kw in DAISO_BRANCH:
+        if _norm(kw) in haystack:
+            return f"다이소형 제외(분류 '{kw}')"
+
+    leaf = _norm(name)
+    for kw in DAISO_NAME:
+        if _norm(kw) in leaf:
+            return f"다이소형 제외('{kw}')"
 
     return None
 
