@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>쿠팡 카테고리 소싱 추첨기</title>
+  <meta name="description" content="쿠팡 전체 카테고리에서 KC인증·어린이·식품 등을 제외하고 소싱 카테고리를 랜덤으로 뽑아주는 도구" />
+  <style>
+    :root {
+      --coupang: #ff5c3c; --coupang-dark: #e84118; --bg: #f4f6f9;
+      --card: #ffffff; --text: #1f2430; --muted: #8a94a6; --line: #eceef2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+      min-height: 100vh; padding: 32px 16px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 24px; }
+    header h1 { font-size: 26px; margin: 0 0 6px; }
+    header h1 .em { color: var(--coupang); }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+    .card {
+      background: var(--card); border-radius: 18px; padding: 22px;
+      box-shadow: 0 8px 30px rgba(31,36,48,.06); margin-bottom: 18px;
+    }
+    .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    select, input[type=number] {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+      font-size: 15px; background: #fff; color: var(--text); min-width: 110px;
+    }
+    button {
+      border: none; border-radius: 12px; padding: 16px; font-size: 17px;
+      font-weight: 700; cursor: pointer; transition: transform .05s, filter .15s;
+      background: var(--coupang); color: #fff; width: 100%;
+    }
+    button:active { transform: translateY(1px); }
+    button:hover { filter: brightness(1.05); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .meta { display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; color: var(--muted); margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+    .meta .pool { color: var(--coupang-dark); font-weight: 700; }
+    .pick {
+      border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+      margin-bottom: 12px; animation: pop .25s ease; background: #fff;
+    }
+    .pick .crumb { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .pick .name { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+    .pick a { display: inline-flex; gap: 6px; font-size: 13px;
+      color: var(--coupang-dark); text-decoration: none; font-weight: 600; }
+    .pick a:hover { text-decoration: underline; }
+    .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+    footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 8px; }
+    .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+      background: #1f2430; color: #fff; padding: 11px 18px; border-radius: 10px;
+      font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
+    .toast.show { opacity: .95; }
+    @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1><span class="em">쿠팡</span> 카테고리 소싱 추첨기</h1>
+      <p>KC인증·어린이·식품·뷰티·도서·반려동물 먹거리 등을 제외하고 랜덤으로 뽑아줍니다</p>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <div class="field">
+          <label>분류 단계</label>
+          <select id="level">
+            <option value="3" selected>소분류 (가장 구체적)</option>
+            <option value="2">중분류</option>
+            <option value="1">대분류</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>뽑을 개수</label>
+          <input type="number" id="count" value="1" min="1" max="20" />
+        </div>
+        <div class="field" style="flex:1; min-width:160px;">
+          <label>&nbsp;</label>
+          <button id="pickBtn">🎲 랜덤으로 뽑기</button>
+        </div>
+      </div>
+      <div class="meta">
+        <span id="updated">불러오는 중…</span>
+        <span>소싱 후보 <span class="pool" id="pool">—</span></span>
+      </div>
+    </div>
+
+    <div id="results">
+      <div class="empty">위 버튼을 눌러 카테고리를 뽑아보세요</div>
+    </div>
+    <footer>데이터는 쿠팡 실사이트 기준 스냅샷입니다 · 갱신은 로컬에서 수집 후 재배포</footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let DATA = null;
+
+    const fmt = (iso) => {
+      if (!iso) return "수집 데이터 없음";
+      const d = new Date(iso);
+      const p = (x) => String(x).padStart(2, "0");
+      return `쿠팡 수집: ${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+    function toast(msg) {
+      const t = $("toast"); t.textContent = msg; t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2400);
+    }
+    function syncPool() {
+      const lv = $("level").value;
+      $("pool").textContent = ((DATA?.pools?.[lv]) ?? 0) + "개";
+    }
+    function sample(arr, n) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a.slice(0, n);
+    }
+    function render(picks) {
+      const box = $("results");
+      if (!picks.length) { box.innerHTML = `<div class="empty">결과가 없습니다</div>`; return; }
+      box.innerHTML = picks.map(p => `
+        <div class="pick">
+          <div class="crumb">${p.path.slice(0, -1).join(" › ") || "&nbsp;"}</div>
+          <div class="name">${p.name}</div>
+          <a href="${p.url}" target="_blank" rel="noopener">쿠팡에서 보기 ↗</a>
+        </div>`).join("");
+    }
+    function doPick() {
+      if (!DATA) { toast("데이터를 아직 불러오지 못했어요"); return; }
+      const lv = Number($("level").value);
+      const n = Math.max(1, Math.min(Number($("count").value) || 1, 20));
+      const pool = DATA.categories.filter(c => c.level === lv);
+      if (!pool.length) { toast("해당 단계에 후보가 없습니다"); return; }
+      render(sample(pool, Math.min(n, pool.length)));
+    }
+    async function load() {
+      try {
+        const r = await fetch("data.json", { cache: "no-store" });
+        DATA = await r.json();
+        $("updated").textContent = fmt(DATA.scraped_at);
+        syncPool();
+      } catch (e) {
+        $("updated").textContent = "데이터 로드 실패";
+        toast("data.json 을 불러오지 못했습니다");
+      }
+    }
+    $("pickBtn").addEventListener("click", doPick);
+    $("level").addEventListener("change", syncPool);
+    load();
+  </script>
+</body>
+</html>

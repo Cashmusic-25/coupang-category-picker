@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>쿠팡 카테고리 소싱 추첨기</title>
+  <style>
+    :root {
+      --coupang: #ff5c3c;
+      --coupang-dark: #e84118;
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --text: #1f2430;
+      --muted: #8a94a6;
+      --line: #eceef2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+      min-height: 100vh; padding: 32px 16px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 24px; }
+    header h1 { font-size: 26px; margin: 0 0 6px; }
+    header h1 .em { color: var(--coupang); }
+    header p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .card {
+      background: var(--card); border-radius: 18px; padding: 22px;
+      box-shadow: 0 8px 30px rgba(31,36,48,.06); margin-bottom: 18px;
+    }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+    select, input[type=number] {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+      font-size: 15px; background: #fff; color: var(--text); min-width: 110px;
+    }
+    .grow { flex: 1; }
+
+    button {
+      border: none; border-radius: 12px; padding: 13px 18px; font-size: 15px;
+      font-weight: 700; cursor: pointer; transition: transform .05s, filter .15s;
+    }
+    button:active { transform: translateY(1px); }
+    .btn-primary { background: var(--coupang); color: #fff; width: 100%; font-size: 17px; padding: 16px; }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-ghost { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+    .btn-ghost:hover { color: var(--text); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+
+    .meta { display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; color: var(--muted); margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+    .meta .pool { color: var(--coupang-dark); font-weight: 700; }
+
+    .results { margin-top: 6px; }
+    .pick {
+      border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+      margin-bottom: 12px; animation: pop .25s ease; background: #fff;
+    }
+    .pick .crumb { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .pick .name { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+    .pick a {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+      color: var(--coupang-dark); text-decoration: none; font-weight: 600;
+    }
+    .pick a:hover { text-decoration: underline; }
+    .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+      background: #1f2430; color: #fff; padding: 11px 18px; border-radius: 10px;
+      font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50;
+    }
+    .toast.show { opacity: .95; }
+    .spin { display:inline-block; width:14px; height:14px; border:2px solid #fff;
+      border-top-color: transparent; border-radius:50%; animation: r .7s linear infinite; vertical-align:-2px; }
+    @keyframes r { to { transform: rotate(360deg); } }
+    @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1><span class="em">쿠팡</span> 카테고리 소싱 추첨기</h1>
+      <p>KC인증·어린이·식품·뷰티·도서·반려동물 먹거리 등을 제외하고 랜덤으로 뽑아줍니다</p>
+    </header>
+
+    <div class="card">
+      <div class="controls">
+        <div class="field">
+          <label>분류 단계</label>
+          <select id="level">
+            <option value="3" selected>소분류 (가장 구체적)</option>
+            <option value="2">중분류</option>
+            <option value="1">대분류</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>뽑을 개수</label>
+          <input type="number" id="count" value="1" min="1" max="20" />
+        </div>
+        <div class="field grow">
+          <label>&nbsp;</label>
+          <button class="btn-ghost" id="refreshBtn" title="쿠팡에서 최신 카테고리를 다시 받아옵니다 (Chrome 창이 잠깐 떴다 닫힘)">
+            ⟳ 최신 카테고리 새로고침
+          </button>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn-primary" id="pickBtn">🎲 랜덤으로 뽑기</button>
+      </div>
+      <div class="meta">
+        <span id="updated">—</span>
+        <span>소싱 후보 <span class="pool" id="pool">—</span></span>
+      </div>
+    </div>
+
+    <div class="results" id="results">
+      <div class="empty">위 버튼을 눌러 카테고리를 뽑아보세요</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (iso) => {
+      if (!iso) return "수집 데이터 없음";
+      const d = new Date(iso);
+      return `수집: ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    };
+    let pools = {1:0,2:0,3:0};
+
+    function toast(msg) {
+      const t = $("toast"); t.textContent = msg; t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 2200);
+    }
+    function syncPool() {
+      const lv = $("level").value;
+      $("pool").textContent = (pools[lv] ?? 0) + "개";
+    }
+    async function loadInfo() {
+      try {
+        const r = await fetch("/api/info"); const d = await r.json();
+        pools = d.pools || pools; $("updated").textContent = fmt(d.scraped_at);
+        syncPool();
+        if (!d.has_data) toast("저장된 카테고리가 없어요. ‘새로고침’을 먼저 눌러주세요");
+      } catch (e) { toast("정보를 불러오지 못했습니다"); }
+    }
+    function render(picks) {
+      const box = $("results");
+      if (!picks.length) { box.innerHTML = `<div class="empty">결과가 없습니다</div>`; return; }
+      box.innerHTML = picks.map(p => `
+        <div class="pick">
+          <div class="crumb">${p.path.slice(0, -1).join(" › ") || "&nbsp;"}</div>
+          <div class="name">${p.name}</div>
+          <a href="${p.url}" target="_blank" rel="noopener">쿠팡에서 보기 ↗</a>
+        </div>`).join("");
+    }
+    async function doPick() {
+      const lv = $("level").value, n = $("count").value;
+      $("pickBtn").disabled = true;
+      try {
+        const r = await fetch(`/api/pick?level=${lv}&n=${n}`);
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || "추첨 실패"); }
+        else { render(d.picks); $("pool").textContent = d.pool_size + "개"; }
+      } catch (e) { toast("추첨 중 오류가 발생했습니다"); }
+      finally { $("pickBtn").disabled = false; }
+    }
+    async function doRefresh() {
+      const b = $("refreshBtn");
+      b.disabled = true; const old = b.innerHTML;
+      b.innerHTML = `<span class="spin"></span> 수집 중...`;
+      toast("쿠팡에서 카테고리를 가져오는 중 (10~20초)…");
+      try {
+        const r = await fetch("/api/refresh", { method: "POST" });
+        const d = await r.json();
+        if (!r.ok) { toast(d.error || "수집 실패"); }
+        else {
+          pools = d.pools; $("updated").textContent = fmt(d.scraped_at);
+          syncPool(); toast(`완료! 총 ${d.total}개 카테고리 수집`);
+        }
+      } catch (e) { toast("수집 중 오류가 발생했습니다"); }
+      finally { b.disabled = false; b.innerHTML = old; }
+    }
+
+    $("pickBtn").addEventListener("click", doPick);
+    $("refreshBtn").addEventListener("click", doRefresh);
+    $("level").addEventListener("change", syncPool);
+    loadInfo();
+  </script>
+</body>
+</html>
